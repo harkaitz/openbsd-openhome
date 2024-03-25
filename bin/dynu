@@ -1,0 +1,111 @@
+#!/bin/sh -e
+##:
+#h: Usage: dynu ...
+#h:
+#h: Manage DNS bindings in `www.dynu.com`. Please set the token
+#h: with DYNU_API_KEY or /etc/tokens/dynu.
+#h:
+#h: ... show                       : Show configuration.
+#h: ... web                        : Open dashboard.
+#h: ... public-ip                  : Get public IP address.
+#h: ... domain-ls                  : List domains.
+#h: ... domain-id  DOMAIN          : Get domain's ID.
+#h: ... domain-set DOMAIN [IPADDR] : Assign IP address to domain.
+##:
+dynu() {
+    local cmd="$1"
+    shift
+    case "${cmd}" in
+        show)       dynu_show_variables                         ;;
+        web)        xdg-open "https://www.dynu.com/en-US/ControlPanel" ;;
+        public-ip)  dynu_public_ip                              ;;
+        domain-ls)  dynu_domain_ls  "$@" | column -s '	' -t    ;;
+        domain-id)  dynu_domain_id  "$@"                        ;;
+        domain-set) dynu_domain_set "$@"                        ;;
+        *)          echo "error: Invalid argument: ${cmd}." >&2; return 1 ;;
+    esac
+}
+dynu_show_variables() {
+    printf '%-25s : %s\n' DYNU_API_KEY "${DYNU_API_KEY}"
+}
+dynu_calc_variables() {
+    if test ! -n "${DYNU_API_KEY}" && test -e /etc/tokens/dynu; then
+        DYNU_API_KEY="$(cat /etc/tokens/dynu)"
+    fi
+}
+## -------------------------------------------------------------------
+dynu_curl_JSON() {
+    if test ! -n "${DYNU_API_KEY}"; then
+        echo "error: Please set DYNU_API_KEY environment variable." >&2
+        return 1
+    fi
+    JSON="$(curl -s -H "accept: application/json" -H "API-Key: ${DYNU_API_KEY}" "$@")"
+    if test ! -n "${JSON}"; then
+        return 1
+    fi
+}
+## -------------------------------------------------------------------
+dynu_public_ip() {
+    local ip="$(dig +short myip.opendns.com @resolver1.opendns.com)"
+    if test -n "${ip}"; then
+        echo "${ip}"
+        return 0
+    else
+        echo "error: Can't calculate public IP address." >&2
+        return 1
+    fi
+}
+dynu_domain_ls() {
+    dynu_curl_JSON "https://api.dynu.com/v2/dns" -X GET
+    jq -r ".domains[] | [.id, .name, .ipv4Address] | @tsv" <<-EOF
+	${JSON}
+	EOF
+}
+dynu_domain_id() {
+    local id d
+    case "${1}" in
+        '') echo "error: Please specify a domain." >&2; return 1;;
+        *)  d="${1}";;
+    esac
+    DYNU_LST="${DYNU_LST:-`dynu_domain_ls`}"
+    id="$(printf '%s\n' "${DYNU_LST}" | awk -v d="${d}" -F '	' '$2 == d {print $1}')"
+    case "${id}" in
+        '') echo "error: Domain ${d} not found in your domain list." >&2; return 1;;
+    esac
+    echo "${id}"
+}
+dynu_domain_set() {
+    local domain="$1" ipaddr="${2:-`dynu_public_ip`}"
+    if test ! -n "${ipaddr}"; then
+        echo "error: Please specify an IP address." >&2
+        return 1
+    fi
+
+    local id="$(dynu_domain_id "${domain}")"
+    test -n "${id}"
+    
+    dynu_curl_JSON                          \
+        "https://api.dynu.com/v2/dns/${id}" \
+        -X POST \
+        -d '{
+                "name"              : "'"${domain}"'",
+                "group"             : "home",
+                "ipv4Address"       : "'"${ipaddr}"'",
+                "ipv6Address"       : null,
+                "ttl"               : 90,
+                "ipv4"              : true,
+                "ipv6"              : false,
+                "ipv4WildcardAlias" : true,
+                "ipv6WildcardAlias" : false,
+                "allowZoneTransfer" : false,
+                "dnssec"            : false
+            }'
+}
+## -------------------------------------------------------------------
+dynu_calc_variables
+if test @"$(basename "$0")" = @"dynu"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0" ;;
+        *)            dynu "$@"; exit 0;;
+    esac
+fi

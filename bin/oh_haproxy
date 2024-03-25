@@ -1,0 +1,181 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_haproxy
+#h:
+#h: Interactive haproxy service configuration wizard.
+##:
+. ohu_dialog
+. ohu_is_root
+. ohu_is_os
+. ohu_edit
+. ohu_canfail
+. ohu_vrun
+oh_haproxy() {
+    local SEL
+    ohu_is_os -s OpenBSD
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0                 \
+                   1 "Install haproxy and assist initial setup."     \
+                   2 "View domains in '/etc/haproxy/haproxy.cfg'."   \
+                   3 "Add new domain to '/etc/haproxy/haproxy.cfg'." \
+                   4 "Add new tunnel to '/etc/haproxy/haproxy.cfg'." \
+                   5 "Edit '/etc/haproxy/haproxy.cfg'."
+        case "$SEL" in
+            1)  ohu_canfail -e oh_haproxy_install      ;;
+            2)  ohu_canfail -e oh_haproxy_list_domains ;;
+            3)  ohu_canfail -e oh_haproxy_add_domain   ;;
+            4)  ohu_canfail -e oh_haproxy_add_tunnel   ;;
+            5)  ohu_canfail -e oh_haproxy_edit         ;;
+            *)  break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_haproxy_install() {
+    ohu_canfail -vr pkg_add haproxy
+
+    ohu_edit -a '
+	Ensure you add the following rules to the firewall.
+	
+	    pass in inet proto tcp from any to any port 443
+	    pass in inet proto tcp from any to any port 80
+	
+    ' /etc/pf.conf 
+    
+    ohu_edit -a '
+	Please ensure that the following lines are inserted to /etc/haproxy/haproxy.cfg
+	
+	    global
+	    	log /dev/log local0
+	    	(delete) uid, gid, chroot
+	    defaults
+	    	option accept-invalid-http-response
+	    	option accept-invalid-http-request
+	    	timeout connect 10s
+	    	timeout client  30s
+	    	timeout server  30s
+	    frontend https-in
+	    	bind *:443
+	    	mode tcp
+	    	tcp-request inspect-delay 5s
+	    	tcp-request content accept if { req_ssl_hello_type 1 }
+	    	tcp-request connection reject if { src_conn_rate(Abuse) ge 10 } # More than 10 new cnx in 3s
+	    	tcp-request connection reject if { src_conn_cur(Abuse) ge 10 }  # More than 10 concurrent cnx in 3s
+	    	tcp-request connection track-sc1 src table Abuse
+	    backend Abuse
+	    	stick-table type ip size 1m expire 30m store conn_rate(3s),conn_cur,gpc0,http_req_rate(10s),http_err_rate(20s)
+	
+    ' /etc/haproxy/haproxy.cfg
+    
+    ohu_edit -a '
+	Add the following at the end of the file:
+	
+	    !haproxy
+	    *.*       /var/log/haproxy
+	
+    ' /etc/syslog.cfg
+
+    ohu_vrun pfctl -f /etc/pf.conf
+    ohu_vrun rcctl restart syslogd
+    ohu_vrun rcctl restart haproxy
+    ohu_vrun rcctl enable haproxy
+}
+oh_haproxy_list_domains() {
+    local txt="$(sed -n '
+    s|_|.|g
+    s|^.*server  *\([^ ]*\)  *\([^ ]*\):\([^ ]*\)$|\1 -> \2:\3|p
+    ' /etc/haproxy/haproxy.cfg)"
+    ohu_dialog @ --msgbox "${txt}" 15 70
+}
+oh_haproxy_add_domain() {
+    local domain http_host http_port certfile
+    
+    ##
+    if test -d "/etc/certs"; then
+        ohu_dialog @ --title "SSL public key certfile" --fselect "/etc/certs/" 0 70
+    else
+        ohu_dialog @ --title "SSL public key certfile" --fselect "" 0 70
+    fi
+    while test ! -f "${SEL}"; do
+        ohu_dialog @ --title "SSL public key certfile" --fselect "${SEL}" 0 70
+    done
+    certfile="${SEL}"
+    
+    ##
+    domain="$(basename "${certfile}" | sed 's|\.[^.]*$||')"	 
+    ohu_dialog @ --inputbox "Enter domain"            0 0 "${domain}"; domain="${SEL}"
+    ohu_dialog @ --inputbox "Enter http server host"  0 0 "127.0.0.1"; http_host="${SEL}"
+    ohu_dialog @ --inputbox "Enter http server port"  0 0 "8080";      http_port="${SEL}"
+    name="$(echo "${domain}" | sed 's|[^a-zA-Z0-9]|_|g')"
+    
+    ##
+    sed -i "
+        /use_backend  *proxy-${name}/d
+        \\|-- *HTTPS:${name} *--|,\\|-- *HTTPS:${name} *--|d
+        /^frontend https-in/a\\
+	use_backend proxy-${name} if { req_ssl_sni -i ${domain} }
+    " /etc/haproxy/haproxy.cfg
+    sed 's|^    |	|g' <<-EOF | tee -a /etc/haproxy/haproxy.cfg > /dev/null
+	## -- HTTPS:${name} --
+	backend proxy-${name}
+	    mode tcp
+	    server loopback-for-tls unix@haproxy-${name} send-proxy-v2
+	frontend https-${name}
+	    mode http
+	    bind unix@haproxy-${name} accept-proxy ssl crt ${certfile} force-tlsv12
+	    use_backend backend-${name}
+	backend backend-${name}
+	    mode http
+	    http-response replace-header location http://(.*) https://\\1
+	    server ${name} ${http_host}:${http_port}
+	## -- HTTPS:${name} --
+	EOF
+    ohu_vrun rcctl restart haproxy
+    ohu_vrun rcctl enable haproxy
+}
+oh_haproxy_add_tunnel() {
+    local SEL fr_proto to_proto fr_port  to_host to_port  name
+
+    ohu_dialog @ --menu "Choose an action" 0 0 0 \
+               1 "TCP->TCP tunnel." \
+               2 "UDP->UDP tunnel."
+    case "$SEL" in
+        1) fr_proto=tcp to_proto=tcp;;
+        2) fr_proto=udp fr_proto=udp;;
+        *) break;;
+    esac
+    
+    ohu_dialog @ --inputbox "Enter local port to listen" 0 0 "8080";      fr_port="${SEL}"
+    ohu_dialog @ --inputbox "Enter remote tcp host"      0 0 "127.0.0.1"; to_host="${SEL}"
+    ohu_dialog @ --inputbox "Enter remote tcp port"      0 0 "8080";      to_port="${SEL}"
+    ohu_dialog @ --inputbox "Tunnel name"                0 0 "";          name="${SEL}"
+    
+    sed -i "
+    \\|-- *TUNNEL:${name} *--|,\\|-- *TUNNEL:${name} *--|d
+    " /etc/haproxy/haproxy.cfg
+    
+    sed 's|^    |	|g' <<-EOF | tee -a /etc/haproxy/haproxy.cfg >/dev/null
+	## -- TUNNEL:${name} --
+	frontend tunnel-${name}
+	    mode ${fr_proto}
+	    bind :${fr_port}
+	    default_backend tunnel-${name}
+	backend tunnel-${name}
+	    mode ${to_proto}
+	    server server-${name} ${to_host}:${to_port}
+	## -- TUNNEL:${name} --
+	EOF
+    
+    ohu_vrun /etc/rc.d/haproxy reload
+}
+
+oh_haproxy_edit() {
+    ohu_edit '/etc/haproxy/haproxy.cfg'
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_haproxy"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_haproxy "$@"; exit 0;;
+    esac
+fi

@@ -1,0 +1,53 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_unbound
+#h:
+#h: Interactive DNS server (unbound) configuration wizard.
+##:
+. ohu_dialog
+. ohu_canfail
+. ohu_vrun
+. ohu_edit
+oh_unbound() {
+    local SEL
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0   \
+                   1 "Install Unbound DNS server."     \
+                   2 "Edit '/var/unbound/etc/unbound.conf'."
+        case "$SEL" in
+            1) ohu_canfail -e oh_unbound_install ;;
+            2) ohu_canfail -e oh_unbound_edit    ;;
+            *) break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_unbound_install() {
+    ohu_vrun pkg_add unbound
+    ohu_edit -a '
+	Ensure to enable DNS traffic.
+	
+	    pass in inet proto udp from any to any port 53
+	
+	' /etc/pf.conf
+    ohu_vrun pfctl -f /etc/pf.conf
+    ohu_vrun rcctl restart unbound
+    ohu_vrun rcctl enable unbound
+}
+oh_unbound_edit() {
+    ohu_edit -a '
+	In server section you can add:
+	
+	    local-data: "<DOMAIN> A <IPADDR>"
+	
+	' /var/unbound/etc/unbound.conf 
+    
+    ohu_vrun rcctl restart unbound
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_unbound"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_unbound "$@"; exit 0;;
+    esac
+fi

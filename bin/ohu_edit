@@ -1,0 +1,42 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_edit [-a HELP] FILES...
+#h:
+#h: Open files for edition, provide HELP in another frame
+#h: to assist the edition.
+##:
+ohu_edit() {
+    local OPTIND optopt hlp= ops=
+    
+    ## Parse command line arguments.
+    while getopts "a:" optopt; do
+        case $optopt in
+            a)
+                hlp="$(mktemp)"
+                echo "${OPTARG}" | sed '1{/^$/d;};s/^	*//' > "${hlp}"
+                ;;
+            \?)
+                return 1
+                ;;
+        esac
+    done
+    shift $(( $OPTIND - 1 ))
+    
+    ## Check mg is installed.
+    if ! which mg >/dev/null; then
+        echo >&2 "error: Please install mg(1)."
+        return 1
+    fi
+    
+    ## Open with text editor.
+    ${EDITOR:-mg} "$@" ${hlp:+ "${hlp}" }
+    if test -n "${hlp}"; then
+        rm -f "${hlp}"
+    fi
+}
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_edit"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_edit "$@"; exit 0;;
+    esac
+fi

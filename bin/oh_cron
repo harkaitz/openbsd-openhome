@@ -1,0 +1,40 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_cron
+#h:
+#h: Interactive cron management.
+##:
+. ohu_dialog
+. ohu_edit
+. ohu_is_root
+. ohu_is_os
+oh_cron() {
+    local SEL
+    ohu_is_os -s OpenBSD
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0 \
+                   1 "Edit '/etc/crontab'."          \
+                   2 "View cron log '/var/cron/log'."
+        case "$SEL" in
+            1) oh_cron_edit ;;
+            2) oh_cron_logs ;;
+            *) break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_cron_edit() {
+    ohu_is_root
+    ohu_edit '/etc/crontab'
+}
+oh_cron_logs() {
+    ohu_dialog --textbox '/var/cron/log' "$(ohu_dialog_lines)" "$(ohu_dialog_cols)"
+}
+## -------------------------------------------------------------------
+OHU_BACKTITLE='OpenHome - Cron configuration'
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_cron"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_cron "$@"; exit 0;;
+    esac
+fi

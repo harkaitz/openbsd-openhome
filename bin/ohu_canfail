@@ -1,0 +1,58 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_canfail [-e] COMMAND
+#h:
+#h:   -v : Print the command executed.
+#h:   -e : Pause if the command fail.
+#h:   -s : Pause after the command.
+#h:   -r : Return failure if the command fails.
+#h:
+#h: Allow command to fail. With [-e] it will ask the user to type
+#h: enter. Use this in menus.
+##:
+ohu_canfail() {
+    local OPTIND optopt ecode opt_e= opt_v= opt_s= opt_r=
+    
+    ## Parse command line arguments.
+    case "${1}" in -*e*) opt_e=y;; esac
+    case "${1}" in -*v*) opt_v=y;; esac
+    case "${1}" in -*s*) opt_s=y;; esac
+    case "${1}" in -*r*) opt_r=y;; esac
+    case "${1}" in -*)   shift;;   esac
+    
+    ##
+    if test -n "${opt_v}"; then
+        echo "$*"
+    fi
+    
+    ##
+    set +e
+    (
+        set -e
+        "$@"
+    )
+    ecode="$?"
+    set -e
+    
+    if test @"$ecode" = @"0"; then
+        if test -n "${opt_s}"; then
+            echo "[Type enter]"
+            read ign
+        else
+            sleep 1
+        fi
+        return 0
+    elif test -n "${opt_e}${opt_s}"; then
+        echo "[Type enter]"
+        read ign
+    fi
+    if test -n "${opt_r}"; then
+        return 1
+    fi
+}
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_canfail"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_canfail "$@"; exit 0;;
+    esac
+fi

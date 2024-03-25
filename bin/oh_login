@@ -1,0 +1,44 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_login
+#h:
+#h: Wizard for configuring SSHD login.
+##:
+. ohu_dialog
+. ohu_canfail
+. ohu_vrun
+. ohu_edit
+oh_login() {
+    local SEL
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0 \
+                   1 "Edit '/etc/ssh/sshd_config'" \
+                   2 "Edit '/etc/motd'"
+        case "$SEL" in
+            1) ohu_canfail -e oh_login_edit_sshd_config ;;
+            2) ohu_canfail -e oh_login_edit_motd        ;;
+            *) break ;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_login_edit_sshd_config() {
+    ohu_edit -a '
+	Disable empty passwords : PermitEmptyPasswords no
+	Disable password auth   : PasswordAuthentication yes
+	' /etc/ssh/sshd_config
+    ohu_vrun /etc/rc.d/sshd configtest
+    ohu_vrun /etc/rc.d/sshd reload
+}
+oh_login_edit_motd() {
+    ohu_edit -a '
+	Execute "oh" to enter to the interactive menu.
+	' /etc/motd
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_login"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_login "$@"; exit 0;;
+    esac
+fi

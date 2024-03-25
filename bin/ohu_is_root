@@ -1,0 +1,22 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_is_root
+#h:
+#h: Print an error when not executed as root.
+#h:
+#h: Environment variables: OHU_BACKTITLE.
+##:
+ohu_is_root() {
+    if test ! "$(id -u)" -eq 0; then
+        dialog ${OHU_BACKTITLE:+ --backtitle "${OHU_BACKTITLE}" } \
+               --title "Error" \
+               --msgbox "You must be root to run this script." 6 40
+        return 1
+    fi
+}
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_is_root"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         ohu_is_root "$@"; exit 0;;
+    esac
+fi

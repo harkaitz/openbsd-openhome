@@ -1,0 +1,69 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_msmtp
+#h:
+#h: Interactive msmtp(1) mail client configuration wizard.
+##:
+. ohu_dialog
+. ohu_canfail
+. ohu_is_root
+. ohu_vrun
+. ohu_edit
+. ohu_is_os
+oh_msmtp() {
+    local SEL
+    ohu_is_root
+    ohu_is_os -s OpenBSD
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0 \
+                   1 "Install msmtp and replace sendmail." \
+                   2 "Edit msmtp configuration." \
+                   3 "Delete '/var/mail/root'."
+        case "$SEL" in
+            1) ohu_canfail -e oh_msmtp_install ;;
+            2) ohu_canfail -e oh_msmtp_edit    ;;
+            3) echo -n > /var/mail/root;;
+            *) break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_msmtp_install() {
+    ohu_vrun pkg_add msmtp
+    ohu_vrun sed -i '/^sendmail/s|/usr/sbin/smtpctl|/usr/local/bin/msmtp|' /etc/mailer.conf
+}
+oh_msmtp_edit() {
+    ohu_edit -a '
+	## At the top put the following blocks:
+	account              USER@COMPANY.COM
+	host                 smtp.gmail.com
+	port                 465
+	from                 USER@COMPANY.COM
+	tls                  on
+	tls_certcheck        on
+	tls_starttls         off
+	logfile              ~/.msmtp.log
+	auth                 on
+	user                 USER@COMPANY.COM
+	password             "<PASS>"
+	
+	## At the bottom put the following:
+	account default: USER@COMPANY.COM
+	syslog LOG_MAIL
+	aliases /etc/mail/aliases
+	' /etc/msmtprc
+    
+    ohu_edit -a '
+	Search "root:", "manager:" and "dumper:" and place
+	there your mail account or accounts.
+	root: ME@gmail.com, OTHER@gmail.com
+	' /etc/mail/aliases
+    ohu_vrun newaliases
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_msmtp"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_msmtp "$@"; exit 0;;
+    esac
+fi

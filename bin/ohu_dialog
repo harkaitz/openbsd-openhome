@@ -1,0 +1,60 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_dialog [@] ARGS ...
+#h:
+#h: Execute dialog(1) with "--backtitle" set. If the first argument
+#h: is @ then the result is saved in SEL (only when sourced).
+#h:
+#h: Environment variables: OHU_BACKTITLE.
+#h: When sourced: ohu_dialog_cols, ohu_dialog_lines
+##:
+ohu_dialog() {
+    local use_SEL tmp res
+    case "$1" in @) use_SEL="y"; shift;; *)  use_SEL="";; esac
+
+    ## Require dialog.
+    if ! which dialog >/dev/null 2>&1; then
+        echo >&2 "error: Please install dialog(1)."
+        return 1
+    fi
+    
+    ## Execute normally.
+    if test ! -n "${use_SEL}"; then
+        ohu_dialog_run "$@"
+        return 0
+    fi
+    
+    ## Save result to temporary file.
+    tmp="$(mktemp)"
+    if ohu_dialog_run "$@" 2> "${tmp}"; then
+        SEL="$(cat "${tmp}")" res=0
+    else
+        res=1
+    fi
+    rm -f "${tmp}"
+    
+    ##
+    return "${res}"
+}
+ohu_dialog_run() {
+    dialog ${OHU_BACKTITLE:+ --backtitle "${OHU_BACKTITLE}" } "$@"
+    clear
+}
+## -------------------------------------------------------------------
+ohu_dialog_cols() {
+    local r="$(tput cols)"
+    if test "$r" -lt 10; then r=0; else r=$(( r - 10 )); fi
+    echo "$r"
+}
+ohu_dialog_lines() {
+    local r="$(tput lines)"
+    if test "$r" -lt 5; then r=0; else r=$(( r - 5 )); fi
+    echo "$r"
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_dialog"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_dialog "$@"; exit 0;;
+    esac
+fi

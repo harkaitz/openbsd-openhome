@@ -1,0 +1,18 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_sysctl VARIABLE VALUE
+##:
+ohu_sysctl() {
+    if grep -q "^${1}=" /etc/sysctl.conf; then
+        sed -i "s|^${1}=.*|${1}=${2}|" /etc/sysctl.conf
+    else
+        echo "${1}=${2}" >> /etc/sysctl.conf
+    fi
+    sysctl "${1}=${2}"
+}
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_sysctl"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_sysctl "$@"; exit 0;;
+    esac
+fi

@@ -1,0 +1,14 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_vrun COMMAND
+##:
+ohu_vrun() {
+    echo "$*"
+    "$@"
+}
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_vrun"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_vrun "$@"; exit 0;;
+    esac
+fi

@@ -1,0 +1,74 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_is_os [-q] [-s OS] [-d DISTRO] [-S|D]
+#h:
+#h: Check the operating system is OS or the Linux distribution
+#h: is DISTRO. If -q is specified no message error is printed.
+#h:
+#h: With -S|D it prints the OS or the distro. Multiple options of
+#h: -s|d can be specified.
+#h:
+#h: When sourced OHU_SYSTEM and OHU_DISTRO are available.
+##:
+ohu_is_os() {
+    local OPTIND optopt found_s kernel distro opt_q= opt_s= opt_d= output=
+    
+    ## Parse command line arguments.
+    while getopts "qs:d:SD" optopt; do
+        case $optopt in
+            q)   opt_q="y";;
+            s)   opt_s="${opt_s}:${OPTARG}:";;
+            d)   opt_d="${opt_d}:${OPTARG}:";;
+            S|D) output="${optopt}";;
+            \?)  return 1;;
+        esac
+    done
+    shift $(( $OPTIND - 1 ))
+    
+    ## Get platform.
+    
+    
+    ## Check platform.
+    if test -n "${opt_s}"; then
+        found_s="$(echo "${opt_s}" | sed -n "/:${OHU_SYSTEM}:/p")"
+    else
+        found_s=y
+    fi
+    if test -n "${opt_d}"; then
+        found_d="$(echo "${opt_d}" | sed -n "/:${OHU_DISTRO}:/p")"
+    else
+        found_d=y
+    fi
+    
+    if test ! -n "${found_s}" || test ! -n "${found_d}"; then
+        if test ! -n "${opt_q}"; then
+            dialog ${OHU_BACKTITLE:+ --backtitle "${OHU_BACKTITLE}" } \
+                   --title "Error" \
+                   --msgbox "Unsupported platform" 6 40
+        fi
+        return 1
+    fi
+    
+    case "${output}" in
+        S) echo "${OHU_SYSTEM}";;
+        D) echo "${OHU_DISTRO}";;
+    esac
+    
+    return 0
+}
+ohu_is_os_calc_variables() {
+    OHU_SYSTEM="$(uname -s)"
+    if test -f /etc/os-release; then
+        OHU_DISTRO="$( . /etc/os-release; echo "${ID}"; )"
+    else
+        OHU_DISTRO="$(uname -s)"
+    fi
+}
+## ------------------------------------------------------------------
+ohu_is_os_calc_variables
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_is_os"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_is_os "$@"; exit 0;;
+    esac
+fi

@@ -1,0 +1,59 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_system
+#h:
+#h: OpenBSD system configuration wizard.
+##:
+. ohu_dialog
+. ohu_is_root
+. ohu_canfail
+. ohu_edit
+oh_system() {
+    local SEL
+    ohu_is_root
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0     \
+                   1 "Execute pkg_add -u"                \
+                   2 "Execute syspatch"                  \
+                   3 "Execute sysupgrade (will restart)" \
+                   4 "Edit /etc/pf.conf (Firewall)"      \
+                   5 "Edit /etc/syslog.conf (Logging)"
+        case "$SEL" in
+            1)  ohu_canfail -ve pkg_add -u
+                ;;
+            2)  ohu_canfail -ve syspatch
+                ;;
+            3)  ohu_canfail -ve sysupgrade -b /upgrade
+                ;;
+            4)  ohu_edit -a "$(oh_pf_help)" /etc/pf.conf
+                ohu_canfail -ve pfctl -f /etc/pf.conf
+                ;;
+            5)  ohu_edit /etc/syslog.conf
+                ohu_canfail -ve rcctl restart syslogd
+                ;;
+            
+            *)  break;;
+        esac
+    done
+}
+oh_pf_help() {
+    cat <<-EOF
+	NOTES ON HOW TO EDIT /etc/pf.conf
+	
+	Enable anti spoofing protection. (interface bse0)
+	
+	    antispoof for bse0 inet
+	EOF
+    echo ""
+    echo "Your interfaces:"
+    echo ""
+    ifconfig | sed 's|^|    |'
+    echo ""
+}
+OHU_BACKTITLE='OpenHome - OpenBSD System Settings'
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_system"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_system "$@"; exit 0;;
+    esac
+fi

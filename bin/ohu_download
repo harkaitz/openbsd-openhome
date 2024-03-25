@@ -1,0 +1,50 @@
+#!/bin/sh -e
+##:
+#h: Usage: ohu_download [-o FILE] URL
+##:
+ohu_download() {
+    local OPTIND optopt ofile=
+    
+    ## Parse command line arguments.
+    while getopts "o:" optopt; do
+        case $optopt in
+            o)  ofile="${OPTARG}";;
+            \?) return 1;;
+        esac
+    done
+    shift $(( $OPTIND - 1 ))
+    
+    ## Perform download.
+    if which wget >/dev/null 2>&1; then
+        ohu_download_wget "$1" "${ofile}"
+    elif which ftp >/dev/null 2>&1; then
+        ohu_download_ftp "$1" "${ofile}"
+    else
+        echo >&2 "error: todo: Implement ftp(1) download."
+        return 1
+    fi
+}
+## -------------------------------------------------------------------
+ohu_download_ftp() {
+    if test -n "${2}"; then
+        ftp -o "${2}".tmp "${1}" >&2
+        mv -v "${2}".tmp "${2}"
+    else
+        ftp "${1}"
+    fi
+}
+ohu_download_wget() {
+    if test -n "${2}"; then
+        wget -O "${2}.tmp" "${1}" >&2
+        mv -v "${2}.tmp" "${2}" >&2
+    else
+        wget -q -O - "$1"
+    fi
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_download"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            ohu_download "$@"; exit 0;;
+    esac
+fi

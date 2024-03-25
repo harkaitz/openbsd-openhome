@@ -1,0 +1,38 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh : Launch the main menu.
+##:
+. ohu_dialog
+. ohu_canfail
+oh() {
+    local SEL
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0  \
+                   1 "OpenBSD system settings."     \
+                   2 "Login (sshd)."                \
+                   3 "VPN (wireguard)."             \
+                   4 "HTTPS (haproxy)."             \
+                   5 "DNS (unbound)."               \
+                   6 "DDNS (dynu)."                 \
+                   7 "SMTP Client (msmtp)."         \
+                   8 "CRON (cron)"
+        case "$SEL" in
+            1)  ohu_canfail -e oh_system    ;;
+            2)  ohu_canfail -e oh_login     ;;
+            3)  ohu_canfail -e oh_wireguard ;;
+            4)  ohu_canfail -e oh_haproxy   ;;
+            5)  ohu_canfail -e oh_unbound   ;;
+            6)  ohu_canfail -e oh_ddns      ;;
+            7)  ohu_canfail -e oh_msmtp     ;;
+            8)  ohu_canfail -e oh_cron      ;;
+            *)  break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh "$@"; exit 0;;
+    esac
+fi

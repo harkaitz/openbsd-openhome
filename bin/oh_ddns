@@ -1,0 +1,92 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_ddns [-u]
+#h:
+#h: Interactive DDNS management. (Only dynu is supported)
+##:
+. ohu_dialog
+. ohu_is_root
+. ohu_is_os
+. ohu_edit
+. ohu_canfail
+. ohu_vrun
+oh_ddns() {
+    local SEL
+    ohu_is_os -s OpenBSD
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0               \
+                   1 "Install curl, isc-bind, jq."                 \
+                   2 "Configure DYNU token in '/etc/tokens/dynu'." \
+                   3 "Edit '/etc/ddns/dynu' to add domains."       \
+                   4 "Execute update."                             \
+                   5 "Edit /etc/crontab to add 'oh_ddns'."
+        case "$SEL" in
+            1) ohu_canfail -e oh_ddns_install      ;;
+            2) ohu_canfail -e oh_ddns_dynu_token   ;;
+            3) ohu_canfail -e oh_ddns_dynu_edit    ;;
+            4) ohu_canfail -e oh_ddns_update       ;;
+            5) ohu_canfail -e oh_ddns_crontab_edit ;;
+            *) break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_ddns_install() {
+    ohu_is_root
+    ohu_vrun pkg_add curl isc-bind-- jq
+}
+oh_ddns_dynu_token() {
+    ohu_is_root
+    mkdir -p /etc/tokens
+    ohu_edit /etc/tokens/dynu
+}
+oh_ddns_dynu_edit() {
+    mkdir -p /etc/ddns
+    ohu_edit /etc/ddns/dynu
+}
+oh_ddns_crontab_edit() {
+    ohu_edit -a "
+	SHELL=/bin/sh
+	@reboot    root -n nice $0 -u
+	30 * * * * root -n nice $0 -u
+    " /etc/crontab
+    ohu_vrun chmod 0600 /etc/crontab
+    ohu_vrun /etc/rc.d/cron reload
+}
+## -------------------------------------------------------------------
+oh_ddns_update() {
+    local ip_r ip_d domain ret=0
+    ip_r="$(dynu public-ip)"
+    if test ! -n "${ip_r}"; then
+        echo "error: Failed fetching the public IP address." >&2
+        return 1
+    fi
+    echo "Current router IP address: ${ip_r}"
+    for domain in $(test ! -f /etc/ddns/dynu || cat /etc/ddns/dynu); do
+        ip_d="$(host "${domain}" 8.8.8.8 | sed -n 's|.*has address *||p')"
+        if test ! -n "${ip_d}"; then
+            echo "Warning: Can't get the IP address for ${domain}." >&2
+            if ! dynu domain-set "${domain}"; then
+                ret=1
+            fi
+        fi
+        if test ! @"${ip_d}" = @"${ip_r}"; then
+            echo "Updating DDNS for ${domain} $ip_d -> $ip_r" >&2
+            if ! dynu domain-set "${domain}"; then
+                ret=1
+            fi
+        else
+            echo "Not updating DDNS for ${domain}, already set." >&2
+        fi
+    done
+    return "$ret"
+}
+
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_ddns"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        -*u*)      oh_ddns_update; exit 0;;
+        *)         oh_ddns "$@"; exit 0;;
+    esac
+fi

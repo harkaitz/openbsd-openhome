@@ -1,0 +1,69 @@
+#!/bin/sh -e
+##:
+#h: Usage: iso_openbsd ...
+#h:
+#h: Consult "https://www.openbsd.org/faq/faq4.html" to know which version
+#h: is the latest and download installation images.
+#h:
+#h: ... last_version                : Get the last version.
+#h: ... get_url IMAGE [amd64] : Get image's download URL.
+#h: ... get_img IMAGE [amd64] : Download to "${DDIR:-/tmp}" and print path.
+#h:
+#h: Supported images: install.{img,iso} miniroot.img cd.iso floppy.img
+##:
+. ohu_download
+iso_openbsd() {
+    local cmd="$1"
+    shift
+    case "${cmd}" in
+        last_version) iso_openbsd_last_version         ;;
+        get_url)      iso_openbsd_search_image "$@"    ;;
+        get_img)      iso_openbsd_download_image "$@"  ;;
+        *)            echo >&2 "error: Invalid argument: ${cmd}"; return 1;;
+    esac
+}
+## -------------------------------------------------------------------
+iso_openbsd_last_version() {
+    local v="$(iso_openbsd_search_image install.iso | sed -n '
+        s|.*/pub/OpenBSD/\([0-9\.]*\).*|\1|p
+        ')"
+    echo "$v"
+}
+iso_openbsd_search_image() {
+    local t p u_faq t u s r
+    t="${1}" p="${2:-amd64}" u_faq='https://www.openbsd.org/faq/faq4.html'
+    case "$t" in
+        '')           echo >&2 "error: Please specify an image."; return 1;;
+        install.img)  t='install[0-9]*.img'  ;;
+        miniroot.img) t='miniroot[0-9]*.img' ;;
+        install.iso)  t='install[0-9]*.iso'  ;;
+        cd.iso)       t='cd[0-9]*.iso'       ;;
+        floppy.img)   t='floppy[0-9]*.img'   ;;
+        *)            echo >&2 "error: Invalid image: ${t}"; return 1;;
+    esac
+    u="https://.*/pub/OpenBSD/.*/${p}/${t}"
+    s="s|.*href=\"\\(${u}\\)\".*|\\1|p"
+    r="$(ohu_download "${u_faq}" | tee /tmp/yyyy | sed -n "${s}")"
+    if test ! -n "${r}"; then
+        echo >&2 "error: Failed searching the image URL to download."
+        return 1
+    fi
+    echo "${r}"
+}
+iso_openbsd_download_image() {
+    local u
+    u="$(iso_openbsd_search_image "$@")"
+    test -n "${u}"
+    i="${DDIR:-/tmp}/$(basename "$u")"
+    if test ! -e "${i}"; then
+        ohu_download -o "${i}" "${u}"
+    fi
+    echo "${i}"
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"iso_openbsd"; then
+    case "${1}" in
+        ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)            iso_openbsd "$@"; exit 0;;
+    esac
+fi

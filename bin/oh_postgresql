@@ -1,0 +1,49 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_postgresql
+#h:
+#h: Interactive PostgreSQL server configuration wizard.
+##:
+. ohu_dialog
+. ohu_canfail
+. ohu_is_root
+. ohu_is_os
+. ohu_vrun
+oh_postgresql() {
+    local SEL
+    ohu_is_os -s OpenBSD
+    ohu_is_root
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0 \
+                   1 "Install PostgreSQL server."    \
+                   2 "Initialize database in /var/postgresql/data" \
+                   3 "Start and enable postgresql."
+        case "${SEL}" in
+            1) ohu_canfail -e oh_postgresql_install    ;;
+            2) ohu_canfail -e oh_postgresql_initialize ;;
+            3) ohu_canfail -e oh_postgresql_enable     ;;
+            *) break;;
+        esac
+    done
+}
+oh_postgresql_install() {
+    ohu_vrun pkg_add -u
+    ohu_vrun pkg_add postgresql-server postgresql-client postgresql-docs
+}
+oh_postgresql_initialize() {
+    ohu_vrun mkdir -p /var/postgresql/data
+    ohu_vrun chown _postgresql:_postgresql /var/postgresql/data
+    ohu_vrun su _postgresql -c 'cd /var/postgresql/data; initdb -D /var/postgresql/data'
+}
+oh_postgresql_enable() {
+    ohu_vrun rcctl start postgresql
+    ohu_vrun rcctl enable postgresql
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_postgresql"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_postgresql "$@"; exit 0;;
+    esac
+fi
+# (i) https://fluca1978.github.io/2021/10/09/PostgreSQLOnOpenBSD

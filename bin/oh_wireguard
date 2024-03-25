@@ -1,0 +1,171 @@
+#!/bin/sh -e
+##:
+#h: Usage: oh_wireguard
+#h:
+#h: Interactive Wireguard VPN service configuration wizard.
+##:
+. ohu_dialog
+. ohu_canfail
+. ohu_sysctl
+. ohu_vrun
+. ohu_edit
+oh_wireguard() {
+    local SEL
+    while true; do
+        ohu_dialog @ --menu "Choose an action" 0 0 0           \
+                  1 "Initial installation and configuration." \
+                  2 "Print new client configuration."         \
+                  3 "Add new client to server."               \
+                  4 "Edit '/etc/wireguard/wg0.conf'."
+        case "$SEL" in
+            1) ohu_canfail -e oh_wireguard_install                 ;;
+            2) ohu_canfail -e oh_wireguard_print_new_client_config ;;
+            3) ohu_canfail -e oh_wireguard_add_new_client          ;;
+            4) ohu_canfail -e oh_wireguard_edit                    ;;
+            *) break;;
+        esac
+    done
+}
+## -------------------------------------------------------------------
+oh_wireguard_install() {
+    local SEL ip mask
+    
+    ohu_vrun pkg_add wireguard-tools
+
+    ohu_sysctl 'net.inet.ip.forwarding' '1'
+    
+    if test ! -f /etc/wireguard/wg0.conf; then
+        ohu_dialog @ --inputbox "Enter the server's ip address" 0 0 "10.0.0.1"
+        ip="${SEL}"
+    fi
+    if test ! -d /etc/wireguard; then
+        echo "Creating /etc/wireguard/ ..."
+        mkdir -p /etc/wireguard
+        chmod 700 /etc/wireguard
+    fi
+    if test ! -f /etc/wireguard/secret.key; then
+        echo "Creating /etc/wireguard/secret.key ..."
+        touch /etc/wireguard/secret.key
+        chmod 600 /etc/wireguard/secret.key
+        wg genkey > /etc/wireguard/secret.key
+    fi
+    if test ! -f /etc/wireguard/public.key; then
+        echo "Creating /etc/wireguard/public.key ..."
+        wg pubkey < /etc/wireguard/secret.key > /etc/wireguard/public.key
+    fi
+    if test ! -f /etc/wireguard/wg0.conf; then
+        echo "Creating /etc/wireguard/wg0.conf ..."
+        cat > /etc/wireguard/wg0.conf <<-EOF
+	[Interface]
+	PrivateKey = $(cat /etc/wireguard/secret.key)
+	ListenPort = 51820
+	EOF
+    fi
+    if test ! -f /etc/hostname.wg0; then
+        echo "Creating /etc/hostname.wg0 ..."
+        cat > /etc/hostname.wg0 <<-EOF
+	inet ${ip} 255.255.255.0 NONE
+	up
+	!/usr/local/bin/wg setconf wg0 /etc/wireguard/wg0.conf 
+	EOF
+    fi
+    
+    ohu_edit -a '
+	Ensure to add the following rules to the firewall.
+	
+	    pass in on wg0
+	    pass in inet proto udp from any to any port 51820
+	' /etc/pf.conf 
+    
+    ohu_vrun sh /etc/netstart wg0
+    ohu_vrun pfctl -f /etc/pf.conf
+    
+    return 0
+}
+oh_wireguard_print_new_client_config() {
+    local ANS server_ip client_ip tmp="$(mktemp)"
+    
+    get_wg0_ipaddr_ANS;        server_ip="${ANS}"
+    get_wg0_unused_ipaddr_ANS; client_ip="${ANS}"
+    
+    cat > "${tmp}" <<-EOX
+	cat <<end > wg0.conf
+	[Interface]
+	PrivateKey = \$(wg genkey)
+	Address = ${client_ip}/24
+	ListenPort = 51820
+	[Peer]
+	PublicKey = $(cat /etc/wireguard/public.key)
+	Endpoint = $(uname -n):51820
+	AllowedIPs = ${server_ip}/24
+	PersistentKeepAlive = 25
+	end
+	sed -n 's|PrivateKey = *||p' wg0.conf | wg pubkey
+	EOX
+    
+    ohu_edit "${tmp}"
+    rm -f "${tmp}"
+}
+oh_wireguard_add_new_client() {
+    local SEL client_ip
+    
+    ohu_dialog @ --inputbox "Enter the client's ip address" 0 0
+    client_ip="${SEL}"
+
+    ohu_dialog @ --inputbox "Enter the client's public key" 0 0
+    client_pubkey="${SEL}"
+    
+    if grep -q "AllowedIPs = ${client_ip}" /etc/wireguard/wg0.conf; then
+        echo "error: The client already exists." >&2
+        return 1
+    fi
+    
+    echo "Adding client to /etc/wireguard/wg0.conf ..."
+    cat >> /etc/wireguard/wg0.conf <<-EOF
+	[Peer]
+	PublicKey = ${client_pubkey}
+	AllowedIPs = ${client_ip}/32
+	EOF
+    ohu_edit /etc/wireguard/wg0.conf
+    ohu_vrun sh /etc/netstart wg0
+    
+    return 0
+}
+oh_wireguard_edit() {
+    ohu_edit /etc/wireguard/wg0.conf
+    ohu_vrun sh /etc/netstart wg0
+}
+## -------------------------------------------------------------------
+get_wg0_ipaddr_ANS() {
+    local ip="$(ifconfig wg0 | sed -n 's|.*inet \([0-9.]*\).*|\1|p')"
+    if test ! -n "${ip}"; then
+        echo >&2 "error: wg0 ip address not found."
+        return 1
+    fi
+    ANS="${ip}"
+}
+get_wg0_unused_ipaddr_ANS() {
+    get_wg0_ipaddr_ANS;
+    local server_ip="${ANS}"
+    local pattern_ip="$(echo "${ANS}" | sed 's|\.[^.]*$|.%i|')"
+    for i in $(seq 1 254); do
+        local client_ip="$(printf "${pattern_ip}" "${i}")"
+        if test @"${client_ip}" = @"${server_ip}"; then
+            continue
+        fi
+        if grep -q "AllowedIPs = ${client_ip}" /etc/wireguard/wg0.conf; then
+            continue
+        fi  
+        ANS="${client_ip}"
+        return 0
+    done
+    echo >&2 "error: No unused ip address found."
+    return 1
+}
+## -------------------------------------------------------------------
+if test @"${SCRNAME:-$(basename "$0")}" = @"oh_wireguard"; then
+    case "${1}" in
+        -h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
+        *)         oh_wireguard "$@"; exit 0;;
+    esac
+fi
