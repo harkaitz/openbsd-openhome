@@ -26,6 +26,7 @@ install-sh:
 	cp bin/oh_wireguard     $(DESTDIR)$(PREFIX)/bin
 	cp bin/oh_msmtp         $(DESTDIR)$(PREFIX)/bin
 	cp bin/ohu_dialog       $(DESTDIR)$(PREFIX)/bin
+	cp bin/htodo-openbsd-sysupgrade $(DESTDIR)$(PREFIX)/bin
 	cp bin/ohu_sysctl       $(DESTDIR)$(PREFIX)/bin
 	cp bin/ohu_is_root      $(DESTDIR)$(PREFIX)/bin
 	cp bin/ohu_canfail      $(DESTDIR)$(PREFIX)/bin

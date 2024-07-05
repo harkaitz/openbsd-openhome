@@ -13,22 +13,25 @@ oh_system() {
     ohu_is_root
     while true; do
         ohu_dialog @ --menu "Choose an action" 0 0 0     \
-                   1 "Execute pkg_add -u"                \
-                   2 "Execute syspatch"                  \
-                   3 "Execute sysupgrade (will restart)" \
-                   4 "Edit /etc/pf.conf (Firewall)"      \
-                   5 "Edit /etc/syslog.conf (Logging)"
+                   1 "Edit /etc/installurl"              \
+                   2 "Execute pkg_add -u"                \
+                   3 "Execute syspatch"                  \
+                   4 "Execute sysupgrade (will restart)" \
+                   5 "Edit /etc/pf.conf (Firewall)"      \
+                   6 "Edit /etc/syslog.conf (Logging)"
         case "$SEL" in
-            1)  ohu_canfail -ve pkg_add -u
+            1)  ohu_edit /etc/installurl
                 ;;
-            2)  ohu_canfail -ve syspatch
+            2)  ohu_canfail -ve pkg_add -u
                 ;;
-            3)  ohu_canfail -ve sysupgrade -b /upgrade
+            3)  ohu_canfail -ve syspatch
                 ;;
-            4)  ohu_edit -a "$(oh_pf_help)" /etc/pf.conf
+            4)  ohu_canfail -ve sysupgrade -b /upgrade
+                ;;
+            5)  ohu_edit -a "$(oh_pf_help)" /etc/pf.conf
                 ohu_canfail -ve pfctl -f /etc/pf.conf
                 ;;
-            5)  ohu_edit /etc/syslog.conf
+            6)  ohu_edit /etc/syslog.conf
                 ohu_canfail -ve rcctl restart syslogd
                 ;;
             
