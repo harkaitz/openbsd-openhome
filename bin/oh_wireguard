@@ -89,9 +89,8 @@ oh_wireguard_print_new_client_config() {
     get_wg0_unused_ipaddr_ANS; client_ip="${ANS}"
     
     cat > "${tmp}" <<-EOX
-	cat <<end > wg0.conf
 	[Interface]
-	PrivateKey = \$(wg genkey)
+	PrivateKey = <PRIVATE-KEY>
 	Address = ${client_ip}/24
 	ListenPort = 51820
 	[Peer]
@@ -99,8 +98,6 @@ oh_wireguard_print_new_client_config() {
 	Endpoint = $(uname -n):51820
 	AllowedIPs = ${server_ip}/24
 	PersistentKeepAlive = 25
-	end
-	sed -n 's|PrivateKey = *||p' wg0.conf | wg pubkey
 	EOX
     
     ohu_edit "${tmp}"
