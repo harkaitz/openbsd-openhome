@@ -64,6 +64,8 @@ oh_haproxy_install() {
 	    	tcp-request connection track-sc1 src table Abuse
 	    backend Abuse
 	    	stick-table type ip size 1m expire 30m store conn_rate(3s),conn_cur,gpc0,http_req_rate(10s),http_err_rate(20s)
+	    userlist whitelist
+	    	# user <your-username> password <echo PASS | encrypt>
 	
     ' /etc/haproxy/haproxy.cfg
     
@@ -88,7 +90,7 @@ oh_haproxy_list_domains() {
     ohu_dialog @ --msgbox "${txt}" 15 70
 }
 oh_haproxy_add_domain() {
-    local domain http_host http_port certfile
+    local domain http_host http_port certfile name whitelist
     
     ##
     if test -d "/etc/certs"; then
@@ -106,6 +108,11 @@ oh_haproxy_add_domain() {
     ohu_dialog @ --inputbox "Enter domain"            0 0 "${domain}"; domain="${SEL}"
     ohu_dialog @ --inputbox "Enter http server host"  0 0 "127.0.0.1"; http_host="${SEL}"
     ohu_dialog @ --inputbox "Enter http server port"  0 0 "8080";      http_port="${SEL}"
+    if ohu_dialog --inputbox "Use user whitelist?" 0 0; then
+        whitelist=y
+    else
+        whitelist=
+    fi
     name="$(echo "${domain}" | sed 's|[^a-zA-Z0-9]|_|g')"
     
     ##
@@ -121,7 +128,9 @@ oh_haproxy_add_domain() {
 	    mode tcp
 	    server loopback-for-tls unix@haproxy-${name} send-proxy-v2
 	frontend https-${name}
-	    mode http
+	    mode http${whitelist:+
+	    acl needs_auth http_auth(whitelist)
+	    http-request auth realm ProtectedService if !needs_auth}
 	    bind unix@haproxy-${name} accept-proxy ssl crt ${certfile} force-tlsv12
 	    use_backend backend-${name}
 	backend backend-${name}
@@ -130,8 +139,7 @@ oh_haproxy_add_domain() {
 	    server ${name} ${http_host}:${http_port}
 	## -- HTTPS:${name} --
 	EOF
-    ohu_vrun rcctl restart haproxy
-    ohu_vrun rcctl enable haproxy
+    ohu_vrun rcctl reload haproxy
 }
 oh_haproxy_add_tunnel() {
     local SEL fr_proto to_proto fr_port  to_host to_port  name
