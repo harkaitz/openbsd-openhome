@@ -5,9 +5,11 @@
 #h: Consult "https://www.openbsd.org/faq/faq4.html" to know which version
 #h: is the latest and download installation images.
 #h:
-#h: ... last_version                : Get the last version.
-#h: ... get_url IMAGE [amd64] : Get image's download URL.
-#h: ... get_img IMAGE [amd64] : Download to "${DDIR:-/tmp}" and print path.
+#h:   last_version            Get the last version.
+#h:   get_url IMAGE [amd64]   Get image's download URL.
+#h:   get_img IMAGE [amd64]   Download to "${DDIR:-/tmp}" and print path.
+#h:
+#h: For installation via flash drive use "install.iso".
 #h:
 #h: Supported images: install.{img,iso} miniroot.img cd.iso floppy.img
 ##:
@@ -19,7 +21,7 @@ iso_openbsd() {
         last_version) iso_openbsd_last_version         ;;
         get_url)      iso_openbsd_search_image "$@"    ;;
         get_img)      iso_openbsd_download_image "$@"  ;;
-        *)            echo >&2 "error: Invalid argument: ${cmd}"; return 1;;
+        *) echo >&2 "error: Invalid argument: ${cmd}"; return 1;;
     esac
 }
 ## -------------------------------------------------------------------
