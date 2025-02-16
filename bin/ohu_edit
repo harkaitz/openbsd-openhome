@@ -6,7 +6,7 @@
 #h: to assist the edition.
 ##:
 ohu_edit() {
-    local OPTIND optopt hlp= ops=
+    local OPTIND=1 optopt hlp= ops=
     
     ## Parse command line arguments.
     while getopts "a:" optopt; do
@@ -34,6 +34,7 @@ ohu_edit() {
         rm -f "${hlp}"
     fi
 }
+# --------------------------------------------------------------------
 if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_edit"; then
     case "${1}" in
         ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;

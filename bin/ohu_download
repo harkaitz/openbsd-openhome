@@ -3,7 +3,7 @@
 #h: Usage: ohu_download [-o FILE] URL
 ##:
 ohu_download() {
-    local OPTIND optopt ofile=
+    local OPTIND=1 optopt ofile=
     
     ## Parse command line arguments.
     while getopts "o:" optopt; do

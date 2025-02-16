@@ -11,7 +11,7 @@
 #h: When sourced OHU_SYSTEM and OHU_DISTRO are available.
 ##:
 ohu_is_os() {
-    local OPTIND optopt found_s kernel distro opt_q= opt_s= opt_d= output=
+    local OPTIND=1 optopt found_s kernel distro opt_q= opt_s= opt_d= output=
     
     ## Parse command line arguments.
     while getopts "qs:d:SD" optopt; do

@@ -21,6 +21,13 @@ dynu
     ... domain-id  DOMAIN          : Get domain's ID.
     ... domain-set DOMAIN [IPADDR] : Assign IP address to domain.
 
+htodo-openbsd-sysupgrade
+
+    Usage: htodo-openbsd-sysupgrade
+    
+    Check whether any OpenBSD machine defined in HTODO_OPENBSD_SYSUPGRADE requires
+    an upgrade.
+
 iso_openbsd
 
     Usage: iso_openbsd ...
@@ -28,9 +35,11 @@ iso_openbsd
     Consult "https://www.openbsd.org/faq/faq4.html" to know which version
     is the latest and download installation images.
     
-    ... last_version                : Get the last version.
-    ... get_url IMAGE [amd64] : Get image's download URL.
-    ... get_img IMAGE [amd64] : Download to "${DDIR:-/tmp}" and print path.
+      last_version            Get the last version.
+      get_url IMAGE [amd64]   Get image's download URL.
+      get_img IMAGE [amd64]   Download to "${DDIR:-/tmp}" and print path.
+    
+    For installation via flash drive use "install.iso".
     
     Supported images: install.{img,iso} miniroot.img cd.iso floppy.img
 
@@ -155,7 +164,7 @@ oh_wireguard
 
 ## Collaborating
 
-For making bug reports, feature requests and donations visit
+For making bug reports, feature requests, support or consulting visit
 one of the following links:
 
 1. [gemini://harkadev.com/oss/](gemini://harkadev.com/oss/)

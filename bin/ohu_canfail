@@ -11,7 +11,7 @@
 #h: enter. Use this in menus.
 ##:
 ohu_canfail() {
-    local OPTIND optopt ecode opt_e= opt_v= opt_s= opt_r=
+    local OPTIND=1 optopt ecode opt_e= opt_v= opt_s= opt_r=
     
     ## Parse command line arguments.
     case "${1}" in -*e*) opt_e=y;; esac
@@ -50,6 +50,7 @@ ohu_canfail() {
         return 1
     fi
 }
+# --------------------------------------------------------------------
 if test @"${SCRNAME:-$(basename "$0")}" = @"ohu_canfail"; then
     case "${1}" in
         ''|-h|--help) sed -n 's/^ *#h: \{0,1\}//p' "$0";;
